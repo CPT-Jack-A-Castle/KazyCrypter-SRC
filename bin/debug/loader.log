@@ -1,0 +1,6 @@
+22.02.2021 21:23:46
+
+Der Index war außerhalb des Arraybereichs.
+   bei License.DownloadGizmoDll() in C:\Users\matze\Desktop\Neuer Ordner (13)\License.cs:Zeile 479.
+   bei License.DownloadComponents() in C:\Users\matze\Desktop\Neuer Ordner (13)\License.cs:Zeile 423.
+   bei License.Initialize() in C:\Users\matze\Desktop\Neuer Ordner (13)\License.cs:Zeile 256.

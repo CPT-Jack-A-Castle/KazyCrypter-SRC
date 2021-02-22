@@ -1,0 +1,11 @@
+C:\Users\matze\Desktop\Neuer Ordner (13)\obj\x86\Debug\KazyCrypter.Login.resources
+C:\Users\matze\Desktop\Neuer Ordner (13)\obj\x86\Debug\KazyCrypter.Main.resources
+C:\Users\matze\Desktop\Neuer Ordner (13)\obj\x86\Debug\KazyCrypter.csproj.GenerateResource.cache
+C:\Users\matze\Desktop\Neuer Ordner (13)\bin\Debug\KazyCrypter.exe.config
+C:\Users\matze\Desktop\Neuer Ordner (13)\bin\Debug\KazyCrypter.exe
+C:\Users\matze\Desktop\Neuer Ordner (13)\bin\Debug\KazyCrypter.pdb
+C:\Users\matze\Desktop\Neuer Ordner (13)\obj\x86\Debug\KazyCrypter.Properties.Resources.resources
+C:\Users\matze\Desktop\Neuer Ordner (13)\obj\x86\Debug\KazyCrypter.csproj.CoreCompileInputs.cache
+C:\Users\matze\Desktop\Neuer Ordner (13)\obj\x86\Debug\KazyCrypter.exe
+C:\Users\matze\Desktop\Neuer Ordner (13)\obj\x86\Debug\KazyCrypter.pdb
+C:\Users\matze\Desktop\Neuer Ordner (13)\obj\x86\Debug\KazyCrypter.csprojAssemblyReference.cache
